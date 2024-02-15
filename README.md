@@ -2,11 +2,11 @@
 
 This Python script connects to the Meridian/Horizon REST API to gather a list of nodes and will attempt to move RRD files after switching `org.opennms.rrd.storeByForeignSource` from `false` to `true`.
 
-
 > [!WARNING]
 > This script has not extensively been tested.
 > Use at your own risk.
 
+Tested on Python 3.8 and 3.11.
 
 ## Setup and Usage
 
