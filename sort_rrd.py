@@ -1,5 +1,7 @@
 # sort-rrd.py
 
+"Script to sort OpenNMS RRD directories from nodeId to foreignSource/foreignId"
+
 import getpass
 import logging
 import os
@@ -11,16 +13,15 @@ import pyonms
 from pyonms.dao.nodes import NodeComponents
 from tqdm import tqdm
 
-batch_formatter = logging.Formatter(
+log_formatter = logging.Formatter(
     "%(asctime)s %(levelname)s [main] (Thread-%(thread)s-%(funcName)s) %(message)s"
 )
-batch_logger = logging.getLogger("sort_rrd")
-batch_logger.setLevel(logging.DEBUG)
+logger = logging.getLogger("sort_rrd")
+logger.setLevel(logging.DEBUG)
 bh = logging.FileHandler("./sort_rrd.log")
-bh.setFormatter(batch_formatter)
+bh.setFormatter(log_formatter)
 bh.setLevel(logging.DEBUG)
-
-batch_logger.addHandler(bh)
+logger.addHandler(bh)
 
 
 @dataclass
@@ -30,15 +31,16 @@ class FS_FID:
 
 
 def main():
+    results: Dict[str, int] = {"moved": 0, "missing": 0, "extra": 0}
 
     rrd_path = input("RRD directory path (do not include trailing slash): ")
 
     if not rrd_path:
-        batch_logger.error("Exiting, RRD path not provided")
+        logger.error("Exiting, RRD path not provided")
         raise ValueError("RRD path not provided")
     else:
         if not os.path.isdir(rrd_path):
-            batch_logger.error("Exiting, RRD path does not exist")
+            logger.error("Exiting, RRD path does not exist")
             raise FileNotFoundError("RRD path does not exist")
 
     hostname = input("Enter hostname (defaults to 'http://localhost:8980/opennms'): ")
@@ -50,7 +52,7 @@ def main():
     if not username:
         username = "admin"
     if not password:
-        batch_logger.error("Exiting, Password not provided")
+        logger.error("Exiting, Password not provided")
         raise ValueError("Password not provided")
 
     server = pyonms.PyONMS(
@@ -58,29 +60,45 @@ def main():
         username=username,
         password=password,
     )
-    batch_logger.info(f"Connecting to {hostname}")
+    logger.info(f"Connecting to {hostname}")
 
-    batch_logger.info("Gathering nodes")
+    logger.info("Gathering nodes")
     nodes = server.nodes.get_nodes(components=[NodeComponents.NONE])
 
     node_mapping: Dict[int, FS_FID] = {}
 
-    batch_logger.info("Associating node ID with FS:FID")
+    logger.info("Associating node ID with FS:FID")
     for node in tqdm(nodes, unit="node", desc="Parsing node IDs"):
         if node.foreignSource:
             node_mapping[node.id] = FS_FID(fs=node.foreignSource, fid=node.foreignId)
 
-    batch_logger.info("Moving RRD directories")
+    logger.info("Moving RRD directories")
     for node_id, fs in tqdm(node_mapping.items(), unit="node", desc="Moving RRDs"):
         try:
             shutil.move(f"{rrd_path}/{node_id}", f"{rrd_path}/fs/{fs.fs}/{fs.fid}")
-            batch_logger.info(
-                f"{rrd_path}/{node_id} moved to {rrd_path}/fs/{fs.fs}/{fs.fid}"
+            logger.info(
+                f"moved: {rrd_path}/{node_id} to {rrd_path}/fs/{fs.fs}/{fs.fid}"
             )
+            results["moved"] += 1
         except FileNotFoundError:
-            batch_logger.warning(f"{rrd_path}/{node_id} does not exist")
+            logger.warning(f"missing: {rrd_path}/{node_id} does not exist")
+            results["missing"] += 1
 
-    batch_logger.info("Completed")
+    logger.info("Looking for orphaned nodeId metrics")
+    remaining = os.listdir(rrd_path)
+    for directory in tqdm(
+        remaining, unit="directories", desc="Checking for extra directories"
+    ):
+        if directory in ["fs"]:
+            continue
+        logger.warning(
+            f"extra: {rrd_path}/{directory} exists but there is no node {directory} currently in inventory."
+        )
+        results["extra"] += 1
+
+    logger.info("Completed")
+    logger.info(f"{results}")
+    print(results)
 
 
 if __name__ == "__main__":

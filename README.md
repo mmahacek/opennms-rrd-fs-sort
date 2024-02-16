@@ -1,6 +1,7 @@
 # OpenNMS RRDs Sorter
 
 This Python script connects to the Meridian/Horizon REST API to gather a list of nodes and will attempt to move RRD files after switching `org.opennms.rrd.storeByForeignSource` from `false` to `true`.
+The script will also report on RRD directories based on node IDs that no longer exist and would be candidates for manual removal to free up disk space.
 
 > [!WARNING]
 > This script has not extensively been tested.
