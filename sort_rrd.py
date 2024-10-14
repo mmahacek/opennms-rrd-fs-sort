@@ -23,6 +23,7 @@ bh.setFormatter(log_formatter)
 bh.setLevel(logging.DEBUG)
 logger.addHandler(bh)
 
+remaining_ignore = ["fs"]
 
 @dataclass
 class FS_FID:
@@ -46,6 +47,13 @@ def main():
     hostname = input("Enter hostname (defaults to 'http://localhost:8980/opennms'): ")
     username = input("Enter username (defaults to 'admin'): ")
     password = getpass.getpass("Enter password (required): ")
+    apply_changes = input("Do you want to move files (If not, dry run will only log proposed changes) [Y/Yes]:")
+
+    if apply_changes.lower in ['y', 'yes']:
+        apply_changes = True
+    else:
+        apply_changes = False
+        logger.info("Dry run - no files will be moved")
 
     if not hostname:
         hostname = "http://localhost:8980/opennms"
@@ -75,7 +83,10 @@ def main():
     logger.info("Moving RRD directories")
     for node_id, fs in tqdm(node_mapping.items(), unit="node", desc="Moving RRDs"):
         try:
-            shutil.move(f"{rrd_path}/{node_id}", f"{rrd_path}/fs/{fs.fs}/{fs.fid}")
+            if apply_changes:
+                shutil.move(f"{rrd_path}/{node_id}", f"{rrd_path}/fs/{fs.fs}/{fs.fid}")
+            else:
+                remaining_ignore.append("node_id")
             logger.info(
                 f"moved: {rrd_path}/{node_id} to {rrd_path}/fs/{fs.fs}/{fs.fid}"
             )
@@ -89,7 +100,7 @@ def main():
     for directory in tqdm(
         remaining, unit="directories", desc="Checking for extra directories"
     ):
-        if directory in ["fs"]:
+        if directory in remaining_ignore:
             continue
         logger.warning(
             f"extra: {rrd_path}/{directory} exists but there is no node {directory} currently in inventory."
