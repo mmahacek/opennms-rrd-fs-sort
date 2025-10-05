@@ -7,7 +7,6 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass
-from typing import Dict
 
 import pyonms
 from pyonms.dao.nodes import NodeComponents
@@ -25,14 +24,18 @@ logger.addHandler(bh)
 
 remaining_ignore = ["fs"]
 
+
 @dataclass
 class FS_FID:
+    """Dataclass to hold foreignSource and foreignId"""
+
     fs: str
     fid: str
 
 
 def main():
-    results: Dict[str, int] = {"moved": 0, "missing": 0, "extra": 0}
+    """Main function to sort RRD directories"""
+    results = {"moved": 0, "missing": 0, "extra": 0}
 
     rrd_path = input("RRD directory path (do not include trailing slash): ")
 
@@ -47,9 +50,11 @@ def main():
     hostname = input("Enter hostname (defaults to 'http://localhost:8980/opennms'): ")
     username = input("Enter username (defaults to 'admin'): ")
     password = getpass.getpass("Enter password (required): ")
-    apply_changes = input("Do you want to move files (If not, dry run will only log proposed changes) [Y/Yes]:")
+    apply_changes = input(
+        "Do you want to move files (If not, dry run will only log proposed changes) [Y/Yes]:"
+    )
 
-    if apply_changes.lower in ['y', 'yes']:
+    if apply_changes.lower in ["y", "yes"]:
         apply_changes = True
     else:
         apply_changes = False
@@ -68,16 +73,16 @@ def main():
         username=username,
         password=password,
     )
-    logger.info(f"Connecting to {hostname}")
+    logger.info("Connecting to %s", hostname)
 
     logger.info("Gathering nodes")
     nodes = server.nodes.get_nodes(components=[NodeComponents.NONE])
 
-    node_mapping: Dict[int, FS_FID] = {}
+    node_mapping = {}
 
     logger.info("Associating node ID with FS:FID")
     for node in tqdm(nodes, unit="node", desc="Parsing node IDs"):
-        if node.foreignSource:
+        if node.foreignSource and node.foreignId:
             node_mapping[node.id] = FS_FID(fs=node.foreignSource, fid=node.foreignId)
 
     logger.info("Moving RRD directories")
@@ -88,11 +93,16 @@ def main():
             else:
                 remaining_ignore.append("node_id")
             logger.info(
-                f"moved: {rrd_path}/{node_id} to {rrd_path}/fs/{fs.fs}/{fs.fid}"
+                "moved: %s/%s to %s/fs/%s/%s",
+                rrd_path,
+                node_id,
+                rrd_path,
+                fs.fs,
+                fs.fid,
             )
             results["moved"] += 1
         except FileNotFoundError:
-            logger.warning(f"missing: {rrd_path}/{node_id} does not exist")
+            logger.warning("missing: %s/%s does not exist", rrd_path, node_id)
             results["missing"] += 1
 
     logger.info("Looking for orphaned nodeId metrics")
@@ -103,12 +113,15 @@ def main():
         if directory in remaining_ignore:
             continue
         logger.warning(
-            f"extra: {rrd_path}/{directory} exists but there is no node {directory} currently in inventory."
+            "extra: %s/%s exists but there is no node %s currently in inventory.",
+            rrd_path,
+            directory,
+            directory,
         )
         results["extra"] += 1
 
     logger.info("Completed")
-    logger.info(f"{results}")
+    logger.info(results)
     print(results)
 
 
